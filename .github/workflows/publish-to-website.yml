@@ -1,0 +1,63 @@
+name: Publish to website
+
+# When content is merged to main, automatically update the website repo's
+# submodule pointer to this latest commit — so merging a PR actually publishes
+# it, with no manual "git submodule update" step.
+#
+# Setup (one time):
+#   1. Create a fine-grained Personal Access Token that can push to the WEBSITE
+#      repo:
+#        GitHub → Settings → Developer settings → Fine-grained tokens →
+#        Generate new token
+#          - Resource owner: The-Sport-Fanalyst
+#          - Repository access: only the WEBSITE repo
+#          - Permissions: Contents → Read and write
+#   2. In THIS (content) repo → Settings → Secrets and variables → Actions →
+#      New repository secret:
+#          Name:  WEBSITE_PUSH_TOKEN
+#          Value: the token
+#   3. (If your website repo isn't named "website", edit WEBSITE_REPO below.)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  bump-submodule:
+    runs-on: ubuntu-latest
+    env:
+      WEBSITE_REPO: The-Sport-Fanalyst/website
+      WEBSITE_BRANCH: main
+    steps:
+      - name: Check token present
+        run: |
+          if [ -z "${{ secrets.WEBSITE_PUSH_TOKEN }}" ]; then
+            echo "WEBSITE_PUSH_TOKEN secret is not set — see this file's setup notes."
+            exit 1
+          fi
+
+      - name: Clone website repo (with submodule)
+        run: |
+          git clone --branch "$WEBSITE_BRANCH" \
+            "https://x-access-token:${{ secrets.WEBSITE_PUSH_TOKEN }}@github.com/${WEBSITE_REPO}.git" web
+          cd web
+          git submodule update --init content
+
+      - name: Point content submodule at latest commit and push
+        run: |
+          cd web
+          git config user.name "tsf-content-bot"
+          git config user.email "bot@thesportfanalyst.local"
+          cd content
+          git fetch origin "$WEBSITE_BRANCH" || git fetch origin main
+          git checkout "${{ github.sha }}"
+          cd ..
+          if git diff --quiet; then
+            echo "Submodule already up to date — nothing to publish."
+            exit 0
+          fi
+          git add content
+          git commit -m "Publish content ${GITHUB_SHA::7}"
+          git push origin "$WEBSITE_BRANCH"
+          echo "Website submodule bumped to ${GITHUB_SHA::7} — Netlify will rebuild."

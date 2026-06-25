@@ -1,0 +1,48 @@
+name: Activate merged projects
+
+# When a project PR is merged to main, flip its status from "In review" to
+# "Active" — because once it's merged and live, it's no longer in review.
+# Runs before/independently of publishing; commits only if something changed.
+#
+# Uses the built-in GITHUB_TOKEN (no setup needed). The commit it makes is
+# tagged [skip-activate] so it never triggers itself.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'projects/**.md'
+
+permissions:
+  contents: write
+
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    # don't run on the bot's own activation commits
+    if: ${{ !contains(github.event.head_commit.message, '[skip-activate]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Flip In review -> Active
+        id: flip
+        run: |
+          changed=0
+          for f in projects/*.md; do
+            [ "$(basename "$f")" = "README.md" ] && continue
+            if grep -q '^status: In review' "$f"; then
+              sed -i 's/^status: In review/status: Active/' "$f"
+              echo "Activated: $f"
+              changed=1
+            fi
+          done
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Commit if changed
+        if: steps.flip.outputs.changed == '1'
+        run: |
+          git config user.name "tsf-content-bot"
+          git config user.email "bot@thesportfanalyst.local"
+          git add projects/*.md
+          git commit -m "Activate merged projects [skip-activate]"
+          git push origin main

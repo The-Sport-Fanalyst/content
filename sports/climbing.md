@@ -4,7 +4,7 @@ slug: climbing
 icon: "◆"
 description: "Sport climbing across speed, boulder, and lead — a young sport with fast-evolving data."
 olympic: true
-paralympic: true
+paralympic: false
 disciplines: []
 featured: false
 order: 9
